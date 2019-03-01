@@ -160,15 +160,17 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
                             print('style loss  : %.3f,  weighted style loss: %.3f\n' % (
                                 _style_loss, style_weight * _style_loss))
 
-                        # add images into board
+                            # add transfer images into board
+                            transfer_summary = sess.run(ti_image,
+                                                        feed_dict={content: demo_content_images,
+                                                                   style: demo_style_images})
+                            summary_writer.add_summary(transfer_summary, step * BATCH_SIZE + batch)
+
+                        # add demo images into board
                         if step == 1:
                             demo_summary = sess.run(demo_image_op,
                                                     feed_dict={content: demo_content_images, style: demo_style_images})
                             summary_writer.add_summary(demo_summary, step * BATCH_SIZE + batch)
-
-                        transfer_summary = sess.run(ti_image,
-                                                    feed_dict={content: demo_content_images, style: demo_style_images})
-                        summary_writer.add_summary(transfer_summary, step * BATCH_SIZE + batch)
 
         except Exception as ex:
             saver.save(sess, model_save_path, global_step=step)
