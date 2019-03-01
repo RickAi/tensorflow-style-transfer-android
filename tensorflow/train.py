@@ -125,7 +125,7 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
                     step += 1
 
                     if step % 1000 == 0:
-                        saver.save(sess, model_save_path, global_step=step, write_meta_graph=False)
+                        saver.save(sess, model_save_path, global_step=step)
 
                     if debug:
                         is_last_step = (epoch == EPOCHS - 1) and (batch == n_batches - 1)
@@ -140,7 +140,7 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
                             print('style loss  : %.3f,  weighted style loss: %.3f\n' % (_style_loss, style_weight * _style_loss))
         except Exception as ex:
             saver.save(sess, model_save_path, global_step=step)
-            print('\nSomething wrong happens! Current model is saved to <%s>' % tmp_save_path)
+            print('\nSomething wrong happens! Current model is saved to <%s>' % model_save_path)
             print('Error message: %s' % str(ex))
 
         ###### Done Training & Save the model ######
