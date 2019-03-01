@@ -13,7 +13,7 @@ IS_TRAINING = False
 
 # for training
 ENCODER_WEIGHTS_PATH = 'vgg19_normalised.npz'
-LOGGING_PERIOD = 20
+LOGGING_PERIOD = 100
 
 STYLE_WEIGHTS = [2.0]
 MODEL_SAVE_PATHS = [

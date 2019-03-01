@@ -96,11 +96,11 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
         tl_scalar = tf.summary.scalar("total_loss", loss)
         loss_summary_op = tf.summary.merge([cl_scalar, sl_scalar, tl_scalar])
 
-        ci_image = tf.summary.image("content_images", content)
+        ci_image = tf.summary.image("content_images", content, max_outputs=8)
+        si_image = tf.summary.image("style_images", style, max_outputs=8)
+        demo_image_op = tf.summary.merge([ci_image, si_image])
 
-        si_image = tf.summary.image("style_image", style)
-        ti_image = tf.summary.image("transfer_images", generated_img)
-        transfer_summary_op = tf.summary.merge([si_image, ti_image])
+        ti_image = tf.summary.image("transfer_images", generated_img, max_outputs=8)
 
         # Training step
         global_step = tf.Variable(0, trainable=False)
@@ -162,11 +162,11 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
 
                         # add images into board
                         if step == 1:
-                            ci_summary = sess.run(ci_image,
-                                                  feed_dict={content: demo_content_images, style: demo_style_images})
-                            summary_writer.add_summary(ci_summary, step * BATCH_SIZE + batch)
+                            demo_summary = sess.run(demo_image_op,
+                                                    feed_dict={content: demo_content_images, style: demo_style_images})
+                            summary_writer.add_summary(demo_summary, step * BATCH_SIZE + batch)
 
-                        transfer_summary = sess.run(transfer_summary_op,
+                        transfer_summary = sess.run(ti_image,
                                                     feed_dict={content: demo_content_images, style: demo_style_images})
                         summary_writer.add_summary(transfer_summary, step * BATCH_SIZE + batch)
 
