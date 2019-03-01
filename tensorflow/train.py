@@ -84,10 +84,16 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
         # compute the total loss
         loss = content_loss + style_weight * style_loss
 
-        tf.summary.scalar("content_loss", content_loss)
-        tf.summary.scalar("style_loss", style_weight * style_loss)
-        tf.summary.scalar("loss", loss)
-        merged_summary_op = tf.summary.merge_all()
+        cl_scalar = tf.summary.scalar("content_loss", content_loss)
+        sl_scalar = tf.summary.scalar("style_loss", style_weight * style_loss)
+        tl_scalar = tf.summary.scalar("total_loss", loss)
+        loss_summary_op = tf.summary.merge([cl_scalar, sl_scalar, tl_scalar])
+
+        ci_image = tf.summary.image("content_images", content)
+
+        si_image = tf.summary.image("style_image", style)
+        ti_image = tf.summary.image("transfer_images", generated_img)
+        transfer_summary_op = tf.summary.merge([si_image, ti_image])
 
         # Training step
         global_step = tf.Variable(0, trainable=False)
@@ -137,15 +143,24 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
 
                         if is_last_step or step == 1 or step % logging_period == 0:
                             elapsed_time = datetime.now() - start_time
-                            _content_loss, _style_loss, _loss, summary = \
-                                sess.run([content_loss, style_loss, loss, merged_summary_op],
+                            _content_loss, _style_loss, _loss, loss_summary = \
+                                sess.run([content_loss, style_loss, loss, loss_summary_op],
                                          feed_dict={content: content_batch, style: style_batch})
 
-                            summary_writer.add_summary(summary, step * BATCH_SIZE + batch)
+                            summary_writer.add_summary(loss_summary, step * BATCH_SIZE + batch)
                             print('step: %d,  total loss: %.3f,  elapsed time: %s' % (step, _loss, elapsed_time))
                             print('content loss: %.3f' % (_content_loss))
                             print('style loss  : %.3f,  weighted style loss: %.3f\n' % (
                             _style_loss, style_weight * _style_loss))
+
+                        # add images into board
+                        if step == 1:
+                            ci_summary = sess.run(ci_image, feed_dict={content: content_batch, style: style_batch})
+                            summary_writer.add_summary(ci_summary, step * BATCH_SIZE + batch)
+
+                        transfer_summary = sess.run(transfer_summary_op, feed_dict={content: content_batch, style: style_batch})
+                        summary_writer.add_summary(transfer_summary, step * BATCH_SIZE + batch)
+
         except Exception as ex:
             saver.save(sess, model_save_path, global_step=step)
             print('\nSomething wrong happens! Current model is saved to <%s>' % model_save_path)
