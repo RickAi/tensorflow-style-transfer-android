@@ -34,6 +34,8 @@ def main(args):
 
         content_imgs_path = list_images(TRAINING_CONTENT_DIR)
         style_imgs_path   = list_images(TRAINING_STYLE_DIR)
+        print('\n>> The content database is %s' % TRAINING_CONTENT_DIR)
+        print('\n>> The style database is %s' % TRAINING_STYLE_DIR)
 
         for style_weight, model_save_path in zip(STYLE_WEIGHTS, MODEL_SAVE_PATHS):
             print('\n>>> Begin to train the network with the style weight: %.2f\n' % style_weight)
