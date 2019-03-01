@@ -33,6 +33,7 @@ import android.media.Image.Plane;
 import android.media.ImageReader;
 import android.media.ImageReader.OnImageAvailableListener;
 import android.os.Bundle;
+import android.os.PersistableBundle;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.util.Size;
@@ -54,6 +55,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Vector;
 
+import org.tensorflow.contrib.android.TensorFlowInferenceInterface;
 import org.tensorflow.demo.OverlayView.DrawCallback;
 import org.tensorflow.demo.env.BorderedText;
 import org.tensorflow.demo.env.ImageUtils;
@@ -66,6 +68,17 @@ import org.tensorflow.demo.env.Logger;
 public class StylizeActivity extends CameraActivity implements OnImageAvailableListener {
   private static final Logger LOGGER = new Logger();
 
+  private TensorFlowInferenceInterface inferenceInterface;
+
+  private static final String MODEL_FILE = "file:///android_asset/frozen_model.pb";
+  private static final String INPUT_NODE = "content";
+  private static final String STYLE_NODE = "style";
+  private static final String OUTPUT_NODE = "clip_by_value";
+
+//  private static final String MODEL_FILE = "file:///android_asset/stylize_quantized.pb";
+//  private static final String INPUT_NODE = "input";
+//  private static final String STYLE_NODE = "style_num";
+//  private static final String OUTPUT_NODE = "transformer/expand/conv3/conv/Sigmoid";
   private static final int NUM_STYLES = 26;
 
   private static final boolean SAVE_PREVIEW_BITMAP = false;
@@ -170,11 +183,6 @@ public class StylizeActivity extends CameraActivity implements OnImageAvailableL
           return true;
         }
       };
-
-  @Override
-  public void onCreate(final Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-  }
 
   @Override
   protected int getLayoutId() {
@@ -365,6 +373,8 @@ public class StylizeActivity extends CameraActivity implements OnImageAvailableL
     previewWidth = size.getWidth();
     previewHeight = size.getHeight();
 
+    inferenceInterface = new TensorFlowInferenceInterface(getAssets(), MODEL_FILE);
+
     final Display display = getWindowManager().getDefaultDisplay();
     final int screenOrientation = display.getRotation();
 
@@ -547,6 +557,23 @@ public class StylizeActivity extends CameraActivity implements OnImageAvailableL
     Trace.endSection();
   }
 
+  private float[] styleFloatValues = new float[512 * 512 * 3];
+  private int[] styleIntValues = new int[512 * 512];;
+
+  @Override
+  public void onCreate(final Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    Bitmap bitmap =
+            getBitmapFromAsset(StylizeActivity.this, "thumbnails/style0.jpg");
+    bitmap.getPixels(styleIntValues, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
+    for (int i = 0; i < styleIntValues.length; ++i) {
+      final int val = styleIntValues[i];
+      styleFloatValues[i * 3] = ((val >> 16) & 0xFF);
+      styleFloatValues[i * 3 + 1] = ((val >> 8) & 0xFF);
+      styleFloatValues[i * 3 + 2] = (val & 0xFF);
+    }
+  }
+
   private void stylizeImage(final Bitmap bitmap) {
     ++frameNum;
     bitmap.getPixels(intValues, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
@@ -568,20 +595,29 @@ public class StylizeActivity extends CameraActivity implements OnImageAvailableL
     } else {
       for (int i = 0; i < intValues.length; ++i) {
         final int val = intValues[i];
-        floatValues[i * 3] = ((val >> 16) & 0xFF) / 255.0f;
-        floatValues[i * 3 + 1] = ((val >> 8) & 0xFF) / 255.0f;
-        floatValues[i * 3 + 2] = (val & 0xFF) / 255.0f;
+        floatValues[i * 3] = ((val >> 16) & 0xFF);
+        floatValues[i * 3 + 1] = ((val >> 8) & 0xFF);
+        floatValues[i * 3 + 2] = (val & 0xFF);
       }
     }
 
-    // TODO: Process the image in TensorFlow here.
+    // Copy the input data into TensorFlow.
+    inferenceInterface.feed(INPUT_NODE, floatValues, 1, bitmap.getWidth(), bitmap.getHeight(), 3);
+    inferenceInterface.feed(STYLE_NODE, styleFloatValues, 1, 512, 512, 3);
+    //    inferenceInterface.feed(STYLE_NODE, styleVals, NUM_STYLES);
+
+    // Execute the output node's dependency sub-graph.
+    inferenceInterface.run(new String[] {OUTPUT_NODE}, isDebug());
+
+    // Copy the data from TensorFlow back into our array.
+    inferenceInterface.fetch(OUTPUT_NODE, floatValues);
 
     for (int i = 0; i < intValues.length; ++i) {
       intValues[i] =
           0xFF000000
-              | (((int) (floatValues[i * 3] * 255)) << 16)
-              | (((int) (floatValues[i * 3 + 1] * 255)) << 8)
-              | ((int) (floatValues[i * 3 + 2] * 255));
+              | (((int) (floatValues[i * 3])) << 16)
+              | (((int) (floatValues[i * 3 + 1])) << 8)
+              | ((int) (floatValues[i * 3 + 2]));
     }
 
     bitmap.setPixels(intValues, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
@@ -622,6 +658,11 @@ public class StylizeActivity extends CameraActivity implements OnImageAvailableL
     canvas.drawBitmap(copy, matrix, new Paint());
 
     final Vector<String> lines = new Vector<>();
+
+    // Add these three lines:
+    final String[] statLines = inferenceInterface.getStatString().split("\n");
+    Collections.addAll(lines, statLines);
+    lines.add("");
 
     lines.add("Frame: " + previewWidth + "x" + previewHeight);
     lines.add("Crop: " + copy.getWidth() + "x" + copy.getHeight());
