@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import numpy as np
 import tensorflow as tf
+from utils import list_images
 
 from style_transfer_net import StyleTransferNet
 from utils import get_train_images
@@ -18,6 +19,9 @@ BATCH_SIZE = 8
 LEARNING_RATE = 1e-4
 LR_DECAY_RATE = 5e-5
 DECAY_STEPS = 1.0
+
+DEMO_CONTENT_DIR = './images/board_content'
+DEMO_STYLE_DIR = './images/board_style'
 
 
 def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
@@ -39,6 +43,9 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
     # get the traing image shape
     HEIGHT, WIDTH, CHANNELS = TRAINING_IMAGE_SHAPE
     INPUT_SHAPE = (BATCH_SIZE, HEIGHT, WIDTH, CHANNELS)
+
+    demo_content_images = get_train_images(list_images(DEMO_CONTENT_DIR), crop_height=HEIGHT, crop_width=WIDTH)
+    demo_style_images = get_train_images(list_images(DEMO_STYLE_DIR), crop_height=HEIGHT, crop_width=WIDTH)
 
     # create the graph
     with tf.Graph().as_default(), tf.Session() as sess:
@@ -151,14 +158,16 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
                             print('step: %d,  total loss: %.3f,  elapsed time: %s' % (step, _loss, elapsed_time))
                             print('content loss: %.3f' % (_content_loss))
                             print('style loss  : %.3f,  weighted style loss: %.3f\n' % (
-                            _style_loss, style_weight * _style_loss))
+                                _style_loss, style_weight * _style_loss))
 
                         # add images into board
                         if step == 1:
-                            ci_summary = sess.run(ci_image, feed_dict={content: content_batch, style: style_batch})
+                            ci_summary = sess.run(ci_image,
+                                                  feed_dict={content: demo_content_images, style: demo_style_images})
                             summary_writer.add_summary(ci_summary, step * BATCH_SIZE + batch)
 
-                        transfer_summary = sess.run(transfer_summary_op, feed_dict={content: content_batch, style: style_batch})
+                        transfer_summary = sess.run(transfer_summary_op,
+                                                    feed_dict={content: demo_content_images, style: demo_style_images})
                         summary_writer.add_summary(transfer_summary, step * BATCH_SIZE + batch)
 
         except Exception as ex:
