@@ -125,7 +125,7 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
                     style_batch = get_train_images(style_batch_path, crop_height=HEIGHT, crop_width=WIDTH)
 
                     # run the training step
-                    sess.run([train_op, merged_summary_op], feed_dict={content: content_batch, style: style_batch})
+                    sess.run(train_op, feed_dict={content: content_batch, style: style_batch})
 
                     step += 1
 
@@ -137,9 +137,9 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
 
                         if is_last_step or step == 1 or step % logging_period == 0:
                             elapsed_time = datetime.now() - start_time
-                            _content_loss, _style_loss, _loss, summary = sess.run([content_loss, style_loss, loss],
-                                                                                  feed_dict={content: content_batch,
-                                                                                             style: style_batch})
+                            _content_loss, _style_loss, _loss, summary = \
+                                sess.run([content_loss, style_loss, loss, merged_summary_op],
+                                         feed_dict={content: content_batch, style: style_batch})
 
                             summary_writer.add_summary(summary, step * BATCH_SIZE + batch)
                             print('step: %d,  total loss: %.3f,  elapsed time: %s' % (step, _loss, elapsed_time))
