@@ -9,11 +9,9 @@ from utils import list_images
 from style_transfer_net import StyleTransferNet
 from utils import get_train_images
 
-STYLE_LAYERS = ('relu1_1', 'relu2_1', 'relu3_1', 'relu4_1')
-
 TRAINING_IMAGE_SHAPE = (256, 256, 3)  # (height, width, color_channels)
 
-EPOCHS = 4
+EPOCHS = 1000
 EPSILON = 1e-5
 BATCH_SIZE = 8
 LEARNING_RATE = 1e-4
@@ -71,7 +69,7 @@ def train(style_weight, content_imgs_path, style_imgs_path, encoder_path,
 
         # compute the style loss
         style_layer_loss = []
-        for layer in STYLE_LAYERS:
+        for layer in stn.encoder.STYLE_LAYERS:
             enc_style_feat = stn.encoded_style_layers[layer]
             enc_gen_feat = enc_gen_layers[layer]
 

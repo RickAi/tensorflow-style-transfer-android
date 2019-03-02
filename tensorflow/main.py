@@ -12,7 +12,8 @@ PROVISION = False
 IS_TRAINING = False
 
 # for training
-ENCODER_WEIGHTS_PATH = 'vgg19_normalised.npz'
+# ENCODER_WEIGHTS_PATH = 'vgg19_normalised.npz'
+ENCODER_WEIGHTS_PATH = 'vgg_16.ckpt'
 LOGGING_PERIOD = 100
 
 STYLE_WEIGHTS = [2.0]

@@ -3,8 +3,8 @@
 
 import tensorflow as tf
 
-from encoder import Encoder
-from decoder import Decoder
+from encoder_vgg16 import Encoder
+from decoder_vgg16 import Decoder
 from adaptive_instance_norm import AdaIN
 
 

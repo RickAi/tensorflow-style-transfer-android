@@ -20,6 +20,7 @@ ENCODER_LAYERS = (
 
 
 class Encoder(object):
+    STYLE_LAYERS = ('relu1_1', 'relu2_1', 'relu3_1', 'relu4_1')
 
     def __init__(self, weights_path):
         # load weights (kernel and bias) from npz file
