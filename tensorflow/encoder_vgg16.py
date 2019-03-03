@@ -5,7 +5,6 @@
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.tools import inspect_checkpoint as chkp
 
 ENCODER_LAYERS = {
     'vgg_16/conv1/conv1_1/biases': [64],
