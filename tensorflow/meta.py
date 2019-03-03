@@ -189,6 +189,7 @@ VGG16_WEIGHT_PATH = 'vgg_16.ckpt'
 
 if __name__ == '__main__':
     start_time = datetime.now()
+    print('\n>>> Begin to stylize images with style weight: %.2f\n' % STYLE_WEIGHT)
 
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument("--provision", type=str2bool, nargs='?',
@@ -201,6 +202,9 @@ if __name__ == '__main__':
 
     TRAINING_CONTENT_DIR = '/research/dept3/ybai/datasets/COCO/train' if args.provision else './images/content'
     TRAINING_STYLE_DIR = '/research/dept3/ybai/datasets/WikiArt/train_1' if args.provision else './images/style'
+
+    print('\n>> The content database is %s' % TRAINING_CONTENT_DIR)
+    print('\n>> The style database is %s' % TRAINING_STYLE_DIR)
 
     content_imgs_path = list_images(TRAINING_CONTENT_DIR)
     style_imgs_path = list_images(TRAINING_STYLE_DIR)
