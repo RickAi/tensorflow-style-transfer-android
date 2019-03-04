@@ -311,8 +311,7 @@ if __name__ == '__main__':
                 content_batch = get_train_images(content_batch_path, crop_height=HEIGHT, crop_width=WIDTH)
                 style_batch = get_train_images(style_batch_path, crop_height=HEIGHT, crop_width=WIDTH)
 
-                ti, _ = sess.run([transformed_images, train_op], feed_dict={content: content_batch, style: style_batch})
-                print('hang')
+                sess.run(train_op, feed_dict={content: content_batch, style: style_batch})
 
                 step += 1
 
