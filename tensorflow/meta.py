@@ -10,6 +10,7 @@ from network_ops import upsample
 from tensorflow.python.ops import init_ops
 from collections import defaultdict
 from keras import backend as K
+from tensorflow.python.framework import ops
 
 # meta network implementation
 #
@@ -74,6 +75,7 @@ class TransformNet:
 
     def __init__(self, base=32):
         self.base = base
+        self.weights = {}
 
     def encode(self, weights, reuse=True):
         net = weights
@@ -125,8 +127,17 @@ class TransformNet:
             biases_name = name + '/biases:0'
 
             weight_len = np.prod(variables[weights_name].shape)
-            tf.assign(variables[weights_name], tf.reshape(weights[name][0][:weight_len], variables[weights_name].shape))
-            tf.assign(variables[biases_name], tf.reshape(weights[name][0][weight_len:], variables[biases_name].shape))
+            self.weights[weights_name] = tf.assign(variables[weights_name], tf.reshape(weights[name][0][:weight_len], variables[weights_name].shape))
+            self.weights[biases_name] = tf.assign(variables[biases_name], tf.reshape(weights[name][0][weight_len:], variables[biases_name].shape))
+
+    def get_weights(self, name):
+        weights_name = 'TransformNet/' + name.split("/", 1)[1] + '/myconv/weights:0'
+        biases_name = 'TransformNet/' + name.split("/", 1)[1] + '/myconv/biases:0'
+        variables = {}
+        if weights_name in self.weights and biases_name in self.weights:
+            variables['weights'] = self.weights[weights_name]
+            variables['biases'] = self.weights[biases_name]
+        return variables
 
     def conv_layer(self, inputs, out_channels, scope, kernel_size=3, stride=1, upsample_factor=None, instance_norm=True,
                    relu=True, trainable=False):
@@ -142,10 +153,14 @@ class TransformNet:
                 net = slim.conv2d(net, out_channels, [kernel_size, kernel_size], stride, scope='conv',
                                   activation_fn=None, padding='VALID')
             else:
-                net = slim.conv2d(net, out_channels, [kernel_size, kernel_size], stride, trainable=trainable,
-                                  scope='myconv', activation_fn=None, padding='VALID',
-                                  weights_initializer=init_ops.zeros_initializer(),
-                                  biases_initializer=init_ops.zeros_initializer())
+                variables = self.get_weights(tf.contrib.framework.get_name_scope())
+                if len(variables) > 0:
+                    net = self.my_conv(net, variables['weights'], variables['biases'], stride, padding='VALID', name='myconv')
+                else:
+                    net = slim.conv2d(net, out_channels, [kernel_size, kernel_size], stride, trainable=trainable,
+                                      scope='myconv', activation_fn=None, padding='VALID',
+                                      weights_initializer=init_ops.zeros_initializer(),
+                                      biases_initializer=init_ops.zeros_initializer())
 
             if instance_norm:
                 net = tf.contrib.layers.instance_norm(net, scope='instance_norm')
@@ -153,6 +168,12 @@ class TransformNet:
                 net = slim.relu(net, out_channels, scope='relu')
 
             return net
+
+    def my_conv(self, input, filter, bias, strides, padding, name):
+        with ops.name_scope(name, [input, filter, bias, strides, padding]):
+            net = tf.nn.conv2d(input, filter, [1, strides, strides, 1], padding, name='weights')
+            net = tf.nn.bias_add(net, bias, name='biases')
+        return net
 
     def residual_block(self, inputs, out_channels, scope):
         with tf.variable_scope(scope, [inputs, out_channels]):
@@ -178,7 +199,7 @@ TV_WEIGHT = 1e-6
 BATCH_SIZE = 8
 TRAINING_IMAGE_SHAPE = (256, 256, 3)  # (height, width, color_channels)
 
-MODEL_SAVE_PATH = "./meta_model"
+MODEL_SAVE_PATH = "./meta_models/meta_models.ckpt"
 LOG_SAVE_PATH = "./meta_logs"
 LOGGING_PERIOD = 20
 
@@ -290,7 +311,8 @@ if __name__ == '__main__':
                 content_batch = get_train_images(content_batch_path, crop_height=HEIGHT, crop_width=WIDTH)
                 style_batch = get_train_images(style_batch_path, crop_height=HEIGHT, crop_width=WIDTH)
 
-                sess.run(train_op, feed_dict={content: content_batch, style: style_batch})
+                ti, _ = sess.run([transformed_images, train_op], feed_dict={content: content_batch, style: style_batch})
+                print('hang')
 
                 step += 1
 
