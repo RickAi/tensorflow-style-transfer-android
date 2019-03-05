@@ -45,7 +45,7 @@ def freeze_graph(aggs):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("model_folder", default="./models", nargs='?', type=str, help="input ckpt model dir")  # 命令行解析，help是提示符，type是输入的类型，
-    parser.add_argument("output_names", default='clip_by_value', nargs='?', type=str, help="output names")
+    parser.add_argument("model_folder", default="./meta_models", nargs='?', type=str, help="input ckpt model dir")  # 命令行解析，help是提示符，type是输入的类型，
+    parser.add_argument("output_names", default='TransformNet_1/upsampling/conv_layer3/conv/BiasAdd', nargs='?', type=str, help="output names")
     aggs = parser.parse_args()
     freeze_graph(aggs)

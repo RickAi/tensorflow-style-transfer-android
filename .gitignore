@@ -19,3 +19,4 @@ tensorflow/outputs/pb
 tensorflow/vgg_16.ckpt
 tensorflow/vgg_16_2016_08_28.tar.gz
 tensorflow/__pycache__
+tensorflow/meta_logs

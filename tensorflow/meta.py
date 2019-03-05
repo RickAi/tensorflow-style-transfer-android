@@ -1,3 +1,6 @@
+import os
+import shutil
+
 import numpy as np
 from tensorflow.contrib import slim
 
@@ -9,8 +12,13 @@ from datetime import datetime
 from network_ops import upsample
 from tensorflow.python.ops import init_ops
 from collections import defaultdict
-from keras import backend as K
 from tensorflow.python.framework import ops
+from tensorflow.python.tools import inspect_checkpoint as chkp
+import os
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+
 
 # meta network implementation
 #
@@ -20,9 +28,12 @@ from tensorflow.python.framework import ops
 class VGG16(object):
 
     def encode(self, image, reuse=True):
+        image = tf.reverse(image, axis=[-1])
+        image = self.preprocess(image)
         with tf.variable_scope('vgg_16', [image], reuse=reuse):
             with slim.arg_scope([slim.conv2d], activation_fn=tf.nn.relu, padding='SAME',
-                                weights_regularizer=slim.l2_regularizer(0.0005)):
+                                weights_initializer=init_ops.zeros_initializer(),
+                                biases_initializer=init_ops.zeros_initializer()):
                 outs = []
                 net = slim.repeat(image, 2, slim.conv2d, 64, [3, 3], scope='conv1', trainable=False)
                 outs.append(net)
@@ -43,15 +54,26 @@ class VGG16(object):
 
     def mean_std(self, features, epsilon=1e-5):
         mean_std_features = []
-        for inputs in features:
-            shape = inputs.shape
-            inputs = (K.permute_dimensions(inputs, (0, 3, 1, 2)))
-            inputs = K.reshape(inputs, (-1, int(shape[3]), int(shape[1]) * int(shape[2])))
-            m = K.mean(inputs, axis=-1, keepdims=False)
-            v = K.sqrt(K.var(inputs, axis=-1, keepdims=False) + K.constant(epsilon, dtype=inputs.dtype.base_dtype))
-            mean_std_features.append(K.concatenate([m, v], axis=-1))
+        for feature in features:
+            m, std = tf.nn.moments(feature, [1, 2])
+            std = tf.sqrt(std)
+            con = tf.concat([m, std], axis=-1)
+            con = tf.reshape(tf.transpose(tf.reshape(con, [con.shape[0], 2, -1]), [0, 2, 1]), [con.shape[0], -1])
+            mean_std_features.append(con)
         mean_std_features = tf.concat(mean_std_features, -1)
         return mean_std_features
+
+    def preprocess(self, image, mode='BGR'):
+        if mode == 'BGR':
+            return image - np.array([103.939, 116.779, 123.68])
+        else:
+            return image - np.array([123.68, 116.779, 103.939])
+
+    def deprocess(self, image, mode='BGR'):
+        if mode == 'BGR':
+            return image + np.array([103.939, 116.779, 123.68])
+        else:
+            return image + np.array([123.68, 116.779, 103.939])
 
 
 class MetaNet:
@@ -127,8 +149,10 @@ class TransformNet:
             biases_name = name + '/biases:0'
 
             weight_len = np.prod(variables[weights_name].shape)
-            self.weights[weights_name] = tf.assign(variables[weights_name], tf.reshape(weights[name][0][:weight_len], variables[weights_name].shape))
-            self.weights[biases_name] = tf.assign(variables[biases_name], tf.reshape(weights[name][0][weight_len:], variables[biases_name].shape))
+            self.weights[weights_name] = tf.assign(variables[weights_name], tf.reshape(weights[name][0][:weight_len],
+                                                                                       variables[weights_name].shape))
+            self.weights[biases_name] = tf.assign(variables[biases_name], tf.reshape(weights[name][0][weight_len:],
+                                                                                     variables[biases_name].shape))
 
     def get_weights(self, name):
         weights_name = 'TransformNet/' + name.split("/", 1)[1] + '/myconv/weights:0'
@@ -155,7 +179,8 @@ class TransformNet:
             else:
                 variables = self.get_weights(tf.contrib.framework.get_name_scope())
                 if len(variables) > 0:
-                    net = self.my_conv(net, variables['weights'], variables['biases'], stride, padding='VALID', name='myconv')
+                    net = self.my_conv(net, variables['weights'], variables['biases'], stride, padding='VALID',
+                                       name='myconv')
                 else:
                     net = slim.conv2d(net, out_channels, [kernel_size, kernel_size], stride, trainable=trainable,
                                       scope='myconv', activation_fn=None, padding='VALID',
@@ -256,6 +281,8 @@ if __name__ == '__main__':
         transform_net.encode(content, reuse=False)
         # ---------init operation, encodes is no sense
 
+        style = tf.reverse(style, axis=[-1])
+        style_preprocess = vgg.preprocess(style)
         style_features = vgg.encode(style)
         style_features_mean = vgg.mean_std(style_features)
 
@@ -264,20 +291,20 @@ if __name__ == '__main__':
         style_weights = metanet.encode(style_features_mean)
 
         # set weights and transform
-        transform_net = TransformNet()
         transform_net.set_weights(style_weights)
         transformed_images = transform_net.encode(content)
+        transformed_images = vgg.deprocess(transformed_images)
 
         # comparision
         content_features = vgg.encode(content)
         transformed_features = vgg.encode(transformed_images)
 
         content_loss = tf.losses.mean_squared_error(transformed_features[2], content_features[2])
-        style_loss = STYLE_WEIGHT * tf.losses.mean_squared_error(vgg.mean_std(transformed_features), style_features_mean)
+        style_loss = tf.losses.mean_squared_error(vgg.mean_std(transformed_features), style_features_mean)
         y = transformed_images
-        tv_loss = TV_WEIGHT * (tf.reduce_sum(tf.math.abs(y[:, :, :-1, :] - y[:, :, 1:, :])) +
-                               tf.reduce_sum(tf.math.abs(y[:, :-1, :, :] - y[:, 1:, :, :])))
-        total_loss = content_loss + style_loss + tv_loss
+        tv_loss = (tf.reduce_sum(tf.math.abs(y[:, :, :-1, :] - y[:, :, 1:, :])) +
+                   tf.reduce_sum(tf.math.abs(y[:, :-1, :, :] - y[:, 1:, :, :])))
+        total_loss = content_loss + STYLE_WEIGHT * style_loss + TV_WEIGHT * tv_loss
 
         cl_scalar = tf.summary.scalar("content_loss", content_loss)
         sl_scalar = tf.summary.scalar("style_loss", STYLE_WEIGHT * style_loss)
@@ -294,7 +321,9 @@ if __name__ == '__main__':
         train_op = tf.train.AdamOptimizer(LEARNING_RATE).minimize(total_loss, global_step=global_step)
 
         sess.run(tf.global_variables_initializer())
-        summary_writer = tf.summary.FileWriter(LOG_SAVE_PATH, graph=tf.get_default_graph())
+        if os.path.exists(LOG_SAVE_PATH):
+            shutil.rmtree(LOG_SAVE_PATH)
+        summary_writer = tf.summary.FileWriter(LOG_SAVE_PATH, graph=tf.get_default_graph(), max_queue=1)
 
         step = 0
         n_batches = int(len(content_imgs_path) // BATCH_SIZE)
@@ -304,14 +333,18 @@ if __name__ == '__main__':
             np.random.shuffle(content_imgs_path)
             np.random.shuffle(style_imgs_path)
 
+            style_batch_path = None
             for batch in range(n_batches):
                 content_batch_path = content_imgs_path[batch * BATCH_SIZE:(batch * BATCH_SIZE + BATCH_SIZE)]
-                style_batch_path = style_imgs_path[batch * BATCH_SIZE:(batch * BATCH_SIZE + BATCH_SIZE)]
+                if batch % 50 == 0:
+                    style_batch_path = style_imgs_path[batch * BATCH_SIZE:(batch * BATCH_SIZE + BATCH_SIZE)]
 
                 content_batch = get_train_images(content_batch_path, crop_height=HEIGHT, crop_width=WIDTH)
                 style_batch = get_train_images(style_batch_path, crop_height=HEIGHT, crop_width=WIDTH)
 
-                sess.run(train_op, feed_dict={content: content_batch, style: style_batch})
+                restore_fn(sess)
+                s, sp, sf, sfm, _ = sess.run([style, style_preprocess, style_features, style_features_mean, train_op],
+                                      feed_dict={content: content_batch, style: style_batch})
 
                 step += 1
 
